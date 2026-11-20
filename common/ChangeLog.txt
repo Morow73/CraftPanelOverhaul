@@ -1,0 +1,3 @@
+[20/11/2026]
+- Added a tooltip for result object labels that extend beyond their container.
+[ ------ ]

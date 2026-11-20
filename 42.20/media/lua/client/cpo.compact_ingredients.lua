@@ -174,16 +174,21 @@ local function applyFullResultLabel(widget, availableWidth)
     end
 
     local labelX = widget.labelIconSize + ITEM_BORDER_SPACING
+    local labelWidth = math.max(1, availableWidth - ITEM_BORDER_SPACING * 2)
     local wrappedText = getTextManager():WrapText(
         itemNameLabel.font,
         itemName,
-        math.max(1, availableWidth)
+        labelWidth,
+        1,
+        "..."
     )
 
     itemNameLabel:setX(labelX)
     itemNameLabel.originalX = labelX
+    itemNameLabel.tooltip = itemName
     itemNameLabel:setName(wrappedText)
-    itemNameLabel:setHeight(getTextManager():MeasureStringY(itemNameLabel.font, wrappedText))
+    itemNameLabel:setWidth(labelWidth)
+    itemNameLabel:setHeight(getTextManager():getFontHeight(itemNameLabel.font))
 end
 
 local originalInputNew = ISWidgetInput.new
