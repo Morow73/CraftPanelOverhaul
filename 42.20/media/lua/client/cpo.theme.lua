@@ -1,14 +1,8 @@
 require "ISUI/Crafting/ISHandcraftWindow"
 require "Entity/ISUI/CraftRecipe/ISHandCraftPanel"
 require "Entity/ISUI/CraftRecipe/ISCraftRecipePanel"
-require "Entity/ISUI/CraftRecipe/ISWidgetIngredientsInputs"
-require "Entity/ISUI/CraftRecipe/ISWidgetIngredientsOutputs"
 require "Entity/ISUI/CraftRecipe/ISWidgetInput"
 require "Entity/ISUI/CraftRecipe/ISWidgetOutput"
-
-if ISHandcraftWindow._cpoThemeHookInstalled then
-    return
-end
 
 local COLORS = {
     panel = { r = 0.08, g = 0.075, b = 0.068 },
@@ -110,7 +104,7 @@ local function setListStyle(list)
 end
 
 local function setItemStyle(widget)
-    if not widget then
+    if not widget or widget.cpoThemeItemStyleApplied then
         return widget
     end
 
@@ -129,45 +123,30 @@ local function setItemStyle(widget)
         a = COLORS.cardBorder.a,
     }
     widget.textColor = { r = COLORS.text.r, g = COLORS.text.g, b = COLORS.text.b, a = COLORS.text.a }
+    widget.cpoThemeItemStyleApplied = true
     return widget
-end
-
-local originalInputNew = ISWidgetInput.new
-ISWidgetInput.new = function(self, ...)
-    return setItemStyle(originalInputNew(self, ...))
-end
-
-local originalOutputNew = ISWidgetOutput.new
-ISWidgetOutput.new = function(self, ...)
-    return setItemStyle(originalOutputNew(self, ...))
 end
 
 local originalInputCalculateLayout = ISWidgetInput.calculateLayout
 ISWidgetInput.calculateLayout = function(self, ...)
+    if not CraftPanelOverhaul.isHandCraftWidget(self) then
+        return originalInputCalculateLayout(self, ...)
+    end
+
+    setItemStyle(self)
     setItemLabelFonts(self)
     return originalInputCalculateLayout(self, ...)
 end
 
 local originalOutputCalculateLayout = ISWidgetOutput.calculateLayout
 ISWidgetOutput.calculateLayout = function(self, ...)
+    if not CraftPanelOverhaul.isHandCraftWidget(self) then
+        return originalOutputCalculateLayout(self, ...)
+    end
+
+    setItemStyle(self)
     setItemLabelFonts(self)
     return originalOutputCalculateLayout(self, ...)
-end
-
-local originalInputsCreateChildren = ISWidgetIngredientsInputs.createChildren
-ISWidgetIngredientsInputs.createChildren = function(self, ...)
-    local result = originalInputsCreateChildren(self, ...)
-    setLabelStyle(self.inputsLabel, COLORS.accent, UIFont.Small)
-    setPanelColors(self, nil, COLORS.border)
-    return result
-end
-
-local originalOutputsCreateChildren = ISWidgetIngredientsOutputs.createChildren
-ISWidgetIngredientsOutputs.createChildren = function(self, ...)
-    local result = originalOutputsCreateChildren(self, ...)
-    setLabelStyle(self.outputsLabel, COLORS.accent, UIFont.Small)
-    setPanelColors(self, nil, COLORS.border)
-    return result
 end
 
 local function applyRecipeTheme(recipePanel)
@@ -186,6 +165,8 @@ local function applyRecipeTheme(recipePanel)
 
     setPanelColors(recipePanel.inputs, COLORS.panel, COLORS.border)
     setPanelColors(recipePanel.outputs, COLORS.panel, COLORS.border)
+    setLabelStyle(recipePanel.inputs and recipePanel.inputs.inputsLabel, COLORS.accent, UIFont.Small)
+    setLabelStyle(recipePanel.outputs and recipePanel.outputs.outputsLabel, COLORS.accent, UIFont.Small)
     setPanelColors(craftControl, COLORS.surface, COLORS.border)
 
     if craftControl then
@@ -199,7 +180,9 @@ end
 local originalRecipeCreateDynamicChildren = ISCraftRecipePanel.createDynamicChildren
 ISCraftRecipePanel.createDynamicChildren = function(self, ...)
     local result = originalRecipeCreateDynamicChildren(self, ...)
-    applyRecipeTheme(self)
+    if CraftPanelOverhaul.isHandCraftWidget(self) then
+        applyRecipeTheme(self)
+    end
     return result
 end
 
@@ -226,6 +209,13 @@ local function applyHandCraftTheme(handCraftPanel)
     setListStyle(categoryList)
 
     applyRecipeTheme(handCraftPanel.recipePanel)
+end
+
+function CraftPanelOverhaul.applyEntityWindowTheme(window, componentPanel)
+    setPanelColors(window, COLORS.panel, COLORS.border)
+    setPanelColors(window.entityHeader, COLORS.surface, COLORS.border)
+    setPanelColors(window.componentsPanel, COLORS.panel, COLORS.border)
+    setPanelColors(componentPanel, COLORS.panel, COLORS.border)
 end
 
 local originalHandCraftPanelCreateChildren = ISHandCraftPanel.createChildren
@@ -326,4 +316,3 @@ ISHandcraftWindow.createChildren = function(self, ...)
     return result
 end
 
-ISHandcraftWindow._cpoThemeHookInstalled = true

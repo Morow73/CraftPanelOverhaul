@@ -1,10 +1,6 @@
 require "Entity/ISUI/CraftRecipe/ISHandCraftPanel"
 require "Entity/ISUI/CraftRecipe/ISCraftRecipePanel"
 
-if ISHandCraftPanel._cpoCompactLayoutHookInstalled then
-    return
-end
-
 local function reduceCellPadding(tableLayout, elements, padding)
     for _, element in ipairs(elements) do
         local cell = tableLayout:cellFor(element)
@@ -50,6 +46,10 @@ local originalRecipeCreateDynamicChildren = ISCraftRecipePanel.createDynamicChil
 ISCraftRecipePanel.createDynamicChildren = function(self, ...)
     local result = originalRecipeCreateDynamicChildren(self, ...)
 
+    if not CraftPanelOverhaul.isHandCraftWidget(self) then
+        return result
+    end
+
     reduceCellPadding(self.rootTable, {
         self.titleWidget,
         self.inputs,
@@ -65,4 +65,3 @@ ISCraftRecipePanel.createDynamicChildren = function(self, ...)
     return result
 end
 
-ISHandCraftPanel._cpoCompactLayoutHookInstalled = true

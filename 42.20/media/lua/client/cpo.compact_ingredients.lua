@@ -3,8 +3,17 @@ require "Entity/ISUI/CraftRecipe/ISWidgetOutput"
 require "Entity/ISUI/CraftRecipe/ISWidgetIngredientsInputs"
 require "Entity/ISUI/CraftRecipe/ISWidgetIngredientsOutputs"
 
-if ISWidgetIngredientsInputs._cpoCompactHookInstalled then
-    return
+CraftPanelOverhaul = CraftPanelOverhaul or {}
+
+function CraftPanelOverhaul.isHandCraftWidget(widget)
+    while widget do
+        local class = getmetatable(widget)
+        if class and class.Type == "ISHandCraftPanel" then
+            return true
+        end
+        widget = widget.parent
+    end
+    return false
 end
 
 local UI_BORDER_SPACING = 3
@@ -15,11 +24,22 @@ local MAX_INPUT_COLUMNS = 2
 local ITEM_ICON_SCALE = 0.55
 local ITEM_CARD_WIDTH_SCALE = 1.05
 
+local function setElementSize(element, width, height)
+    if element then
+        element:setWidth(width)
+        element:setHeight(height)
+    end
+end
+
 local function getGridColumns(itemCount, maxColumns)
     return math.max(1, math.min(maxColumns or MAX_GRID_COLUMNS, itemCount))
 end
 
 local function compactItemWidget(widget)
+    if widget._cpoCompactItemApplied then
+        return widget
+    end
+
     widget.iconSize = math.max(24, math.floor(widget.iconSize * ITEM_ICON_SCALE + 0.5))
     widget.labelIconSize = math.max(12, math.floor(widget.labelIconSize * 0.8 + 0.5))
 
@@ -31,6 +51,22 @@ local function compactItemWidget(widget)
     widget.cpoBaseIconBorderSizeX = widget.iconBorderSizeX
     widget.iconBorderSizeY = ITEM_BORDER_SPACING * 2 + widget.iconSize
 
+    local primary = widget.primary
+    setElementSize(primary and primary.icon, widget.iconSize, widget.iconSize)
+    setElementSize(primary and primary.selectInputButton, widget.selectInputButtonSize, widget.selectInputButtonSize)
+
+    local secondary = widget.secondary
+    setElementSize(secondary and secondary.icon, widget.iconSize, widget.iconSize)
+    setElementSize(widget.iconTool, widget.labelIconSize, widget.labelIconSize)
+    setElementSize(widget.iconConsumed, widget.labelIconSize, widget.labelIconSize)
+    setElementSize(widget.iconReturned, widget.labelIconSize, widget.labelIconSize)
+    if widget.arrow then
+        widget.arrow.scaledWidth = widget.iconSize / 2
+        widget.arrow.scaledHeight = widget.iconSize
+        setElementSize(widget.arrow, widget.arrow.scaledWidth, widget.arrow.scaledHeight)
+    end
+
+    widget._cpoCompactItemApplied = true
     return widget
 end
 
@@ -191,21 +227,15 @@ local function applyFullResultLabel(widget, availableWidth)
     itemNameLabel:setHeight(getTextManager():getFontHeight(itemNameLabel.font))
 end
 
-local originalInputNew = ISWidgetInput.new
-
-ISWidgetInput.new = function(self, ...)
-    return compactItemWidget(originalInputNew(self, ...))
-end
-
-local originalOutputNew = ISWidgetOutput.new
-
-ISWidgetOutput.new = function(self, ...)
-    return compactItemWidget(originalOutputNew(self, ...))
-end
-
 local originalInputCalculateLayout = ISWidgetInput.calculateLayout
 
 ISWidgetInput.calculateLayout = function(self, preferredWidth, preferredHeight)
+    if not CraftPanelOverhaul.isHandCraftWidget(self) then
+        return originalInputCalculateLayout(self, preferredWidth, preferredHeight)
+    end
+
+    compactItemWidget(self)
+
     if self.displayAsOutput then
         local result = originalInputCalculateLayout(self, preferredWidth, preferredHeight)
         centerInputIcons(self)
@@ -228,7 +258,10 @@ local originalInputUpdateValues = ISWidgetInput.updateValues
 ISWidgetInput.updateValues = function(self, ...)
     local result = originalInputUpdateValues(self, ...)
 
-    if not self.displayAsOutput and self.primary and self.primary.icon then
+    if CraftPanelOverhaul.isHandCraftWidget(self)
+        and not self.displayAsOutput
+        and self.primary
+        and self.primary.icon then
         self.iconConsumed:setVisible(false)
         self.iconReturned:setVisible(false)
 
@@ -247,6 +280,11 @@ end
 local originalOutputCalculateLayout = ISWidgetOutput.calculateLayout
 
 ISWidgetOutput.calculateLayout = function(self, preferredWidth, preferredHeight)
+    if not CraftPanelOverhaul.isHandCraftWidget(self) then
+        return originalOutputCalculateLayout(self, preferredWidth, preferredHeight)
+    end
+
+    compactItemWidget(self)
     local result = originalOutputCalculateLayout(self, preferredWidth, preferredHeight)
     local labelWidth = self.cpoResultLabelWidth
         or (self.width - self.labelIconSize - UI_BORDER_SPACING)
@@ -267,9 +305,8 @@ ISWidgetIngredientsInputs.calculateLayout = function(self, preferredWidth, prefe
     local width = math.max(self.minimumWidth or 0, preferredWidth or 0)
     local height = math.max(self.minimumHeight or 0, preferredHeight or 0)
 
-    local minWidth = UI_BORDER_SPACING * 2
+    local minWidth = UI_BORDER_SPACING * 2 + self.inputsLabel:getWidth()
     local minHeight = UI_BORDER_SPACING
-    minWidth = math.max(minWidth, minWidth + self.inputsLabel:getWidth())
     minHeight = minHeight + self.inputsLabel:getHeight() + UI_BORDER_SPACING
 
     local minInputWidth, minInputHeight = getMinimumItemSize(self.inputs)
@@ -346,11 +383,16 @@ ISWidgetIngredientsInputs.calculateLayout = function(self, preferredWidth, prefe
     self:setHeight(height)
 end
 
+local originalOutputsCalculateLayout = ISWidgetIngredientsOutputs.calculateLayout
+
 ISWidgetIngredientsOutputs.calculateLayout = function(self, preferredWidth, preferredHeight)
+    if not CraftPanelOverhaul.isHandCraftWidget(self) then
+        return originalOutputsCalculateLayout(self, preferredWidth, preferredHeight)
+    end
+
     local width = math.max(self.minimumWidth or 0, preferredWidth or 0)
 
-    local minWidth = UI_BORDER_SPACING * 2
-    minWidth = math.max(minWidth, minWidth + self.outputsLabel:getWidth())
+    local minWidth = UI_BORDER_SPACING * 2 + self.outputsLabel:getWidth()
 
     local minOutputWidth = getMinimumOutputWidth(self.outputs)
 
@@ -431,4 +473,3 @@ ISWidgetIngredientsOutputs.calculateLayout = function(self, preferredWidth, pref
     self:setHeight(height)
 end
 
-ISWidgetIngredientsInputs._cpoCompactHookInstalled = true

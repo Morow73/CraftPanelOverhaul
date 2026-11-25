@@ -1,9 +1,5 @@
 require "Entity/ISUI/CraftRecipe/ISWidgetHandCraftControl"
 
-if ISWidgetHandCraftControl._cpoCompactHookInstalled then
-    return
-end
-
 local UI_BORDER_SPACING = 3
 local PACIFIST_PENALTIES = {
     [Perks.SmallBlade] = true,
@@ -291,4 +287,3 @@ ISWidgetHandCraftControl.prerender = function(self, ...)
     return result
 end
 
-ISWidgetHandCraftControl._cpoCompactHookInstalled = true

@@ -1,11 +1,8 @@
 require "Entity/ISUI/Controls/ISWidgetTitleHeader"
 require "Entity/ISUI/CraftRecipe/ISCraftRecipePanel"
 require "ISUI/Crafting/ISHandcraftWindow"
+require "Entity/ISUI/Windows/ISEntityWindow"
 require "ISUI/ISToolTip"
-
-if ISWidgetTitleHeader._cpoStatusTooltipHookInstalled then
-    return
-end
 
 local TITLE_TEXT_MAX_WIDTH = 145
 local TITLE_ICON_SCALE = 0.75
@@ -200,7 +197,9 @@ local originalTitleUpdateLabels = ISWidgetTitleHeader.updateLabels
 
 ISWidgetTitleHeader.updateLabels = function(self, ...)
     local result = originalTitleUpdateLabels(self, ...)
-    updateRecipeStatusText(self)
+    if CraftPanelOverhaul.isHandCraftWidget(self) then
+        updateRecipeStatusText(self)
+    end
     return result
 end
 
@@ -208,13 +207,19 @@ local originalTitleUpdate = ISWidgetTitleHeader.update
 
 ISWidgetTitleHeader.update = function(self, ...)
     local result = originalTitleUpdate(self, ...)
-    updateStatusTooltip(self)
+    if CraftPanelOverhaul.isHandCraftWidget(self) then
+        updateStatusTooltip(self)
+    end
     return result
 end
 
 local originalTitleCalculateLayout = ISWidgetTitleHeader.calculateLayout
 
 ISWidgetTitleHeader.calculateLayout = function(self, ...)
+    if not CraftPanelOverhaul.isHandCraftWidget(self) then
+        return originalTitleCalculateLayout(self, ...)
+    end
+
     local iconCount = 0
     for _, field in ipairs(STATUS_ICON_FIELDS) do
         local icon = self[field]
@@ -275,6 +280,10 @@ local function removeStatusTooltip(titleWidget)
 end
 
 ISCraftRecipePanel.createDynamicChildren = function(self, ...)
+    if not CraftPanelOverhaul.isHandCraftWidget(self) then
+        return originalRecipeCreateDynamicChildren(self, ...)
+    end
+
     removeStatusTooltip(self.titleWidget)
     local result = originalRecipeCreateDynamicChildren(self, ...)
     compactTitleHeader(self.titleWidget)
@@ -289,4 +298,14 @@ ISHandcraftWindow.close = function(self, ...)
     return originalWindowClose(self, ...)
 end
 
-ISWidgetTitleHeader._cpoStatusTooltipHookInstalled = true
+local originalEntityWindowClose = ISEntityWindow.close
+ISEntityWindow.close = function(self, ...)
+    local componentPanels = self.componentsPanel and self.componentsPanel.panels or {}
+    for _, panelInfo in ipairs(componentPanels) do
+        local handCraftPanel = panelInfo.panel and panelInfo.panel.handCraftPanel
+        local recipePanel = handCraftPanel and handCraftPanel.recipePanel
+        removeStatusTooltip(recipePanel and recipePanel.titleWidget)
+    end
+    return originalEntityWindowClose(self, ...)
+end
+

@@ -2,15 +2,34 @@ require "ISUI/ISLabel"
 require "RadioCom/ISUIRadio/ISSliderPanel"
 require "ISUI/Crafting/ISHandcraftWindow"
 require "ISUI/Crafting/ISHandcraftWindowHeader"
+require "Entity/ISUI/Controls/ISWidgetEntityHeader"
 require "Entity/ISUI/CraftRecipe/ISCraftRecipePanel"
+require "Entity/ISUI/Windows/ISEntityWindow"
 
-if ISHandcraftWindowHeader._cpoTransparencyHookInstalled then
-    return
-end
-
-local defaultTransparency = 20
+local defaultTransparency = CraftPanelOverhaul.getBackgroundTransparency
+    and CraftPanelOverhaul.getBackgroundTransparency()
+    or 20
 local windows = setmetatable({}, { __mode = "k" })
 local originalAlphas = setmetatable({}, { __mode = "k" })
+
+local function getEntityCraftBenchPanel(window)
+    local componentPanels = window and window.componentsPanel and window.componentsPanel.panels
+    for _, panelInfo in ipairs(componentPanels or {}) do
+        local componentPanel = panelInfo.panel
+        if componentPanel and componentPanel.handCraftPanel then
+            return componentPanel
+        end
+    end
+end
+
+local function getCraftPanel(window)
+    if not window then
+        return nil
+    end
+
+    local componentPanel = getEntityCraftBenchPanel(window)
+    return window.handCraftPanel or (componentPanel and componentPanel.handCraftPanel)
+end
 
 local function applyPanelTransparency(panel)
     if not panel or not panel.backgroundColor then
@@ -25,6 +44,10 @@ local function applyPanelTransparency(panel)
 end
 
 local function applyRecipeTransparency(recipePanel)
+    if not recipePanel then
+        return
+    end
+
     applyPanelTransparency(recipePanel)
     applyPanelTransparency(recipePanel.titleWidget)
     applyPanelTransparency(recipePanel.inputs)
@@ -37,37 +60,34 @@ local function applyWindowTransparency(window)
         return
     end
 
-    local handCraftPanel = window.handCraftPanel
+    local componentPanel = getEntityCraftBenchPanel(window)
+    local craftPanel = window.handCraftPanel or (componentPanel and componentPanel.handCraftPanel)
 
     applyPanelTransparency(window)
     applyPanelTransparency(window.windowHeader)
-    applyPanelTransparency(handCraftPanel)
+    applyPanelTransparency(window.entityHeader)
+    applyPanelTransparency(window.componentsPanel)
+    applyPanelTransparency(craftPanel)
 
-    if not handCraftPanel then
+    applyPanelTransparency(componentPanel)
+    if not craftPanel then
         return
     end
 
-    applyPanelTransparency(handCraftPanel.recipeCategories)
-    applyPanelTransparency(handCraftPanel.recipesPanel)
-    applyPanelTransparency(handCraftPanel.inventoryPanel)
+    local categories = craftPanel.recipeCategories
+    local recipes = craftPanel.recipesPanel
+    local recipeList = recipes and recipes.recipeListPanel
 
-    if handCraftPanel.recipeCategories then
-        applyPanelTransparency(handCraftPanel.recipeCategories.recipeCategoryPanel)
-    end
+    applyPanelTransparency(categories)
+    applyPanelTransparency(categories and categories.recipeCategoryPanel)
+    applyPanelTransparency(recipes)
+    applyPanelTransparency(recipes and recipes.recipeFilterPanel)
+    applyPanelTransparency(recipeList)
+    applyPanelTransparency(recipeList and recipeList.recipeListPanel)
+    applyPanelTransparency(recipes and recipes.recipeIconPanel)
+    applyPanelTransparency(craftPanel.inventoryPanel)
 
-    if handCraftPanel.recipesPanel then
-        applyPanelTransparency(handCraftPanel.recipesPanel.recipeFilterPanel)
-        applyPanelTransparency(handCraftPanel.recipesPanel.recipeListPanel)
-        applyPanelTransparency(handCraftPanel.recipesPanel.recipeIconPanel)
-
-        local recipeList = handCraftPanel.recipesPanel.recipeListPanel
-    
-        if recipeList then
-            applyPanelTransparency(recipeList.recipeListPanel)
-        end
-    end
-
-    applyRecipeTransparency(handCraftPanel.recipePanel)
+    applyRecipeTransparency(craftPanel.recipePanel)
 end
 
 function CraftPanelOverhaul.setBackgroundTransparency(value)
@@ -89,30 +109,48 @@ local function onTransparencyChanged(_, value)
     CraftPanelOverhaul.setBackgroundTransparency(value)
 end
 
-local function getRecipeFilterPanel(header)
-    local window = header.parent
-    local handCraftPanel = window and window.handCraftPanel
-    local recipesPanel = handCraftPanel and handCraftPanel.recipesPanel
+local function getRecipeFilterPanel(window)
+    local craftPanel = window and getCraftPanel(window)
+    local recipesPanel = craftPanel and craftPanel.recipesPanel
     return recipesPanel and recipesPanel.recipeFilterPanel
 end
 
 local function getRecipeFilterMinimumWidth(filterPanel)
     local gap = 5
-    local width = 130 + gap + filterPanel.viewModeButton:getWidth() + 2
+    local inset = gap + 1
+    local viewModeWidth = filterPanel.viewModeButton:getWidth()
+    local filterTypeWidth = filterPanel.filterTypeCombo and filterPanel.filterTypeCombo:getWidth() or 0
+    local sortWidth = filterPanel.sortCombo and filterPanel.sortCombo:getWidth() or 0
 
-    if filterPanel.filterTypeCombo then
-        width = width + gap + filterPanel.filterTypeCombo:getWidth()
+    if filterTypeWidth > 0 and sortWidth > 0 then
+        filterTypeWidth = math.max(filterTypeWidth, sortWidth - viewModeWidth - gap)
+    end
+
+    local width = inset * 2 + 130 + viewModeWidth + gap
+    if filterTypeWidth > 0 then
+        width = width + filterTypeWidth + gap
+    end
+
+    local tickBox = filterPanel.showAllRecipeTickBox
+    if tickBox and filterPanel.sortComboLabel and filterPanel.sortCombo then
+        local secondRowWidth = inset * 2
+            + tickBox:getWidth()
+            + filterPanel.sortComboLabel:getWidth()
+            + gap * 2
+            + viewModeWidth
+            + filterTypeWidth
+        width = math.max(width, secondRowWidth)
     end
 
     return math.max(filterPanel.minimumWidth or 0, width)
 end
 
-local function moveRecipeFilterToHeader(window)
-    local handCraftPanel = window.handCraftPanel
-    local recipesPanel = handCraftPanel and handCraftPanel.recipesPanel
+local function moveRecipeFilterToHeader(window, header)
+    local craftPanel = getCraftPanel(window)
+    local recipesPanel = craftPanel and craftPanel.recipesPanel
     local filterPanel = recipesPanel and recipesPanel.recipeFilterPanel
 
-    if not filterPanel or filterPanel._cpoMovedToHeader then
+    if not filterPanel or filterPanel._cpoMovedToHeader or not header then
         return
     end
 
@@ -130,39 +168,38 @@ local function moveRecipeFilterToHeader(window)
         filterPanel.parent:removeChild(filterPanel)
     end
 
-    window.windowHeader:addChild(filterPanel)
+    header:addChild(filterPanel)
     filterPanel._cpoMovedToHeader = true
 
-    window.windowHeader.borderColor.a = 0
+    if header.title then
+        header.cpoWindowTitle = header.title.origTitleStr or header.title.name
+        header.title:setVisible(false)
+        header.title:setWidth(0)
+    end
+    if header.icon then
+        header:removeChild(header.icon)
+        header.icon = nil
+        header.iconSize = 0
+    end
+    header.borderColor.a = 0
     filterPanel.borderColor.a = 0
-
-    local icon = window.windowHeader.icon
-
-    if icon then
-        window.windowHeader:removeChild(icon)
-        window.windowHeader.icon = nil
-        window.windowHeader.iconSize = 0
-    end
-
-    local title = window.windowHeader.title
-
-    if title then
-        title:setVisible(false)
-        title:setWidth(0)
-    end
 
     if filterPanel.showAllRecipeTickBox then
         filterPanel.showAllRecipeTickBox.changeOptionTarget = filterPanel.callbackTarget
-        filterPanel.showAllRecipeTickBox.changeOptionMethod = function(handCraftPanel, _, enabled)
-            handCraftPanel:setSeeAllRecipe(enabled)
+        filterPanel.showAllRecipeTickBox.changeOptionMethod = function(target, _, enabled)
+            target:setSeeAllRecipe(enabled)
         end
     end
 
     filterPanel.filter = function(panel, textFilter, selectedCombo)
         panel.searchEntryBox:setText(textFilter)
-        panel.filterTypeCombo:selectOptionFromText(selectedCombo)
-        panel.showAllRecipeTickBox:setSelected(1, true)
-        panel.callbackTarget:setSeeAllRecipe(true)
+        if panel.filterTypeCombo then
+            panel.filterTypeCombo:selectOptionFromText(selectedCombo)
+        end
+        if panel.showAllRecipeTickBox then
+            panel.showAllRecipeTickBox:setSelected(1, true)
+            panel.callbackTarget:setSeeAllRecipe(true)
+        end
         panel.searchEntryBox:onTextChange()
     end
 end
@@ -191,90 +228,100 @@ local function addTransparencySlider(header)
     header:addChild(slider)
 end
 
-local originalHeaderCalculateLayout = ISHandcraftWindowHeader.calculateLayout
+local function createHeaderCalculateLayout(originalCalculateLayout)
+    return function(header, preferredWidth, preferredHeight)
+        local window = header.parent
+        local isHandcraftWindow = window and window.windowHeader == header
+        local isEntityCraftWindow = window
+            and window.entityHeader == header
+            and getEntityCraftBenchPanel(window)
+        local filterPanel = (isHandcraftWindow or isEntityCraftWindow) and getRecipeFilterPanel(window) or nil
 
-local function calculateHeaderLayout(header, preferredWidth, preferredHeight)
-    local label = header.transparencyLabel
-    local slider = header.transparencySlider
+        if isHandcraftWindow or isEntityCraftWindow then
+            if not header.transparencySlider then
+                addTransparencySlider(header)
+            end
 
-    if not label or not slider then
-        originalHeaderCalculateLayout(header, preferredWidth, preferredHeight)
-        return
-    end
+            if isEntityCraftWindow and isEntityCraftWindow.componentHeader then
+                isEntityCraftWindow:removeComponentHeader()
+            end
 
-    local gap = 8
-    local filterPanel = getRecipeFilterPanel(header)
-    local filterMinimumWidth = 0
-    local filterHeight = 0
+            if filterPanel and not filterPanel._cpoMovedToHeader then
+                moveRecipeFilterToHeader(window, header)
+            end
 
-    if filterPanel and filterPanel._cpoMovedToHeader then
-        filterMinimumWidth = getRecipeFilterMinimumWidth(filterPanel)
-        filterPanel:calculateLayout(filterMinimumWidth, 0)
-        filterMinimumWidth = math.max(filterMinimumWidth, filterPanel.minimumWidth or 0)
-        filterPanel:calculateLayout(filterMinimumWidth, 0)
-        filterHeight = filterPanel:getHeight()
-    end
+            if not windows[window] then
+                windows[window] = true
+                if isEntityCraftWindow then
+                    CraftPanelOverhaul.applyEntityWindowTheme(window, isEntityCraftWindow)
+                end
+                applyWindowTransparency(window)
+            end
+        end
 
-    local requiredHeight = math.max(
-        preferredHeight or 0,
-        filterHeight + header.paddingTop + header.paddingBottom + header.marginTop + header.marginBottom
-    )
-    originalHeaderCalculateLayout(header, preferredWidth, requiredHeight)
+        local label = header.transparencyLabel
+        local slider = header.transparencySlider
 
-    local infoWidth = header.buttonInfo and header.buttonInfo:getWidth() + gap or 0
-    local requiredWidth = (filterMinimumWidth > 0 and filterMinimumWidth + gap or 0)
-        + gap + label:getWidth()
-        + gap + slider:getWidth()
-        + infoWidth
-        + header.paddingRight + header.marginRight + gap
+        if not label or not slider then
+            originalCalculateLayout(header, preferredWidth, preferredHeight)
+            return
+        end
 
-    if header:getWidth() < requiredWidth then
-        originalHeaderCalculateLayout(header, requiredWidth, requiredHeight)
-    end
+        local gap = 8
+        local filterMinimumWidth = 0
+        local filterHeight = 0
 
-    local controlsRight = header.buttonInfo and header.buttonInfo:getX() - gap or header:getWidth() - header.paddingRight - header.marginRight - gap
+        if filterPanel and filterPanel._cpoMovedToHeader then
+            filterMinimumWidth = getRecipeFilterMinimumWidth(filterPanel)
+            filterPanel:calculateLayout(filterMinimumWidth, 0)
+            filterMinimumWidth = math.max(filterMinimumWidth, filterPanel.minimumWidth or 0)
+            filterPanel:calculateLayout(filterMinimumWidth, 0)
+            filterHeight = filterPanel:getHeight()
+        end
 
-    slider:setX(controlsRight - slider:getWidth())
-    slider:setY((header:getHeight() - slider:getHeight()) / 2)
-    label:setX(slider:getX() - gap - label:getWidth())
-    label:setY((header:getHeight() - label:getHeight()) / 2)
+        local requiredHeight = math.max(
+            preferredHeight or 0,
+            filterHeight + header.paddingTop + header.paddingBottom + header.marginTop + header.marginBottom
+        )
+        originalCalculateLayout(header, preferredWidth, requiredHeight)
 
-    if filterPanel and filterPanel._cpoMovedToHeader then
-        local filterX = 0
-        local filterRight = label:getX() - gap
-        filterPanel:calculateLayout(math.max(filterMinimumWidth, filterRight - filterX), 0)
-        filterPanel:setX(filterX)
-        filterPanel:setY((header:getHeight() - filterPanel:getHeight()) / 2)
+        local infoWidth = header.buttonInfo and header.buttonInfo:getWidth() + gap or 0
+        local titleWidth = header.title and header.title:isVisible() and header.title:getRight() or 0
+        local requiredWidth = (filterMinimumWidth > 0 and filterMinimumWidth + gap or 0)
+            + (titleWidth > 0 and titleWidth + gap or 0)
+            + gap + label:getWidth()
+            + gap + slider:getWidth()
+            + infoWidth
+            + header.paddingRight + header.marginRight + gap
+
+        if header:getWidth() < requiredWidth then
+            originalCalculateLayout(header, requiredWidth, requiredHeight)
+        end
+
+        local controlsRight = header.buttonInfo and header.buttonInfo:getX() - gap or header:getWidth() - header.paddingRight - header.marginRight - gap
+
+        slider:setX(controlsRight - slider:getWidth())
+        slider:setY((header:getHeight() - slider:getHeight()) / 2)
+        label:setX(slider:getX() - gap - label:getWidth())
+        label:setY((header:getHeight() - label:getHeight()) / 2)
+
+        if filterPanel and filterPanel._cpoMovedToHeader then
+            local filterX = 0
+            local filterRight = label:getX() - gap
+            filterPanel:calculateLayout(math.max(filterMinimumWidth, filterRight - filterX), 0)
+            filterPanel:setX(filterX)
+            filterPanel:setY((header:getHeight() - filterPanel:getHeight()) / 2)
+        end
     end
 end
 
-ISHandcraftWindowHeader._cpoTransparencyHookInstalled = true
-
-local originalHeaderCreateChildren = ISHandcraftWindowHeader.createChildren
-
-ISHandcraftWindowHeader.createChildren = function(self, ...)
-    originalHeaderCreateChildren(self, ...)
-    addTransparencySlider(self)
-end
-
-ISHandcraftWindowHeader.calculateLayout = calculateHeaderLayout
-
-local originalWindowCreateChildren = ISHandcraftWindow.createChildren
-
-ISHandcraftWindow.createChildren = function(self, ...)
-    local result = originalWindowCreateChildren(self, ...)
-    windows[self] = true
-    moveRecipeFilterToHeader(self)
-    applyWindowTransparency(self)
-    self:xuiRecalculateLayout(nil, nil, true)
-    return result
-end
+ISHandcraftWindowHeader.calculateLayout = createHeaderCalculateLayout(
+    ISHandcraftWindowHeader.calculateLayout
+)
 
 local originalWindowPrerender = ISHandcraftWindow.prerender
-
 ISHandcraftWindow.prerender = function(self, ...)
     local result = originalWindowPrerender(self, ...)
-
     local title = self.windowHeader and self.windowHeader.title and self.windowHeader.title.name
 
     if title and title ~= "" then
@@ -295,9 +342,35 @@ ISHandcraftWindow.prerender = function(self, ...)
 end
 
 local originalRecipeCreateDynamicChildren = ISCraftRecipePanel.createDynamicChildren
-
 ISCraftRecipePanel.createDynamicChildren = function(self, ...)
     local result = originalRecipeCreateDynamicChildren(self, ...)
     applyRecipeTransparency(self)
+    return result
+end
+
+ISWidgetEntityHeader.calculateLayout = createHeaderCalculateLayout(
+    ISWidgetEntityHeader.calculateLayout
+)
+
+local originalEntityWindowPrerender = ISEntityWindow.prerender
+ISEntityWindow.prerender = function(self, ...)
+    local result = originalEntityWindowPrerender(self, ...)
+    local header = self.entityHeader
+    local title = header and header.cpoWindowTitle
+
+    if title and title ~= "" and getEntityCraftBenchPanel(self) then
+        local titleX
+
+        if self.infoButton then
+            titleX = self.infoButton:getRight() + (5 - getCore():getOptionFontSizeReal()) * 2
+        elseif self.closeButton then
+            titleX = self.closeButton:getRight() + 8
+        else
+            titleX = 40
+        end
+
+        self:drawText(title, titleX, 0, 1, 1, 1, 1, UIFont.Small)
+    end
+
     return result
 end

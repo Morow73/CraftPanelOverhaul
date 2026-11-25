@@ -1,3 +1,7 @@
 [20/11/2026]
 - Added a tooltip for result object labels that extend beyond their container.
 [ ------ ]
+
+[25/11/2026]
+- Matched CraftBench entity window backgrounds and transparency to the Craft panel.
+[ ------ ]
